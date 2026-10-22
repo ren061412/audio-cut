@@ -367,8 +367,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"error": "not found"}, 404)
 
 
-defdef lan_ip():
-    """社内に伝える URL 用に、IP を調べる（クラウド環境用安全化）"""
+def lan_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))
