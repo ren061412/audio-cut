@@ -367,18 +367,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"error": "not found"}, 404)
 
 
-def lan_ip():
-    """社員に伝える URL 用に、このMacの社内ネットワーク（Wi-Fi・有線）での IP を調べる。"""
-    for dev in ("en0", "en1"):  # VPN などの別の経路より、Wi-Fi・有線の IP を優先する
-        r = subprocess.run(["ipconfig", "getifaddr", dev], capture_output=True, text=True)
-        if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.strip()
+defdef lan_ip():
+    """社内に伝える URL 用に、IP を調べる（クラウド環境用安全化）"""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))
             return s.getsockname()[0]
-    except OSError:
-        return None
+    except Exception:
+        return "127.0.0.1"
 
 
 # ---------------------------------------------------------------- データページの自動更新
