@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instagram 監査レポート</title>
+<style>
+:root {
+  --bg: #f6f6f4; --surface: #fff; --surface-2: #f0efeb; --text: #1d1d1f; --muted: #6b6b72; --border: #d9d8d2;
+  --grid: #e7e6e1;
+  --s1: #2a78d6; --s1-soft: #86b6ef; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #1f7a3f; --good-soft: #e3f3e8; --warn: #a15c00; --warn-soft: #fdf1dc; --info: #2a78d6; --info-soft: #e6f0fb;
+  --band: rgba(42, 120, 214, .07);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --surface: #1c1c1f; --surface-2: #26262a; --text: #ececee; --muted: #a0a0a8; --border: #3a3a40;
+    --grid: #2c2c31;
+    --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --good: #7ccf9c; --good-soft: #173024; --warn: #f0b35a; --warn-soft: #3a2a12; --info: #86b6ef; --info-soft: #1b2a3b;
+    --band: rgba(57, 135, 229, .12);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141416; --surface: #1c1c1f; --surface-2: #26262a; --text: #ececee; --muted: #a0a0a8; --border: #3a3a40;
+  --grid: #2c2c31;
+  --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --good: #7ccf9c; --good-soft: #173024; --warn: #f0b35a; --warn-soft: #3a2a12; --info: #86b6ef; --info-soft: #1b2a3b;
+  --band: rgba(57, 135, 229, .12);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--s1); }
+main { max-width: 1240px; margin: 0 auto; padding: 0 16px 80px; }
+
+/* ページ切り替え（データ / 編集ツール） */
+.topnav { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.topnav .in { max-width: 1240px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; }
+.topnav a { padding: 14px 18px 12px; text-decoration: none; color: var(--muted); font-weight: 700; border-bottom: 3px solid transparent; }
+.topnav a.on { color: var(--text); border-bottom-color: var(--text); }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 17px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 16px; }
+
+/* アカウント */
+.account { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.account .who { flex: 1 1 320px; }
+.account .handle { color: var(--muted); font-size: 14px; }
+.account .bio { white-space: pre-line; font-size: 13.5px; color: var(--muted); margin-top: 8px; }
+.account .nums { display: flex; gap: 28px; }
+.account .nums div { text-align: center; }
+.account .nums b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.account .nums span { font-size: 12.5px; color: var(--muted); }
+.asof { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+#refreshErr { color: var(--warn); }
+
+/* 期間の切り替え */
+.periodbar { display: flex; align-items: center; gap: 14px; margin: 24px 0 14px; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 4px; }
+.seg button { border: 0; background: none; font: inherit; font-weight: 700; color: var(--muted); padding: 8px 20px; border-radius: 9px; cursor: pointer; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.range { color: var(--muted); font-size: 13.5px; }
+
+/* 数字のタイル */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.kpi .k { font-size: 12.5px; color: var(--muted); }
+.kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.kpi .d { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kpi .d b { font-weight: 700; color: var(--text); }
+
+/* グラフ */
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .gl { stroke: var(--grid); stroke-width: 1; }
+.chart .base { stroke: var(--border); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover { fill: rgba(127,127,127,.08); }
+.chart .bandr { fill: var(--band); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 0 0 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.tip {
+  position: fixed; pointer-events: none; z-index: 50; background: var(--text); color: var(--bg); border-radius: 8px;
+  padding: 8px 10px; font-size: 12.5px; line-height: 1.6; display: none; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.tip b { display: block; }
+
+/* 内訳バー */
+.split { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; margin: 10px 0 12px; }
+.split div { min-width: 2px; }
+.splitlegend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px; font-size: 13.5px; }
+.splitlegend span { color: var(--muted); }
+.splitlegend b { font-variant-numeric: tabular-nums; margin-left: 4px; }
+
+/* 投稿の表 */
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+th:nth-child(2), td:nth-child(2) { text-align: left; white-space: normal; min-width: 220px; }
+th:first-child, td:first-child { text-align: left; }
+td a { color: var(--text); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.type { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--surface-2); color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
+
+/* 監査 */
+.audit { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; margin-top: 14px; }
+.finding { border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; background: var(--surface); }
+.finding .top { display: flex; align-items: center; gap: 8px; }
+.finding .st { font-size: 12px; font-weight: 700; border-radius: 99px; padding: 2px 10px; flex: none; }
+.st.good { background: var(--good-soft); color: var(--good); }
+.st.warn { background: var(--warn-soft); color: var(--warn); }
+.st.info { background: var(--info-soft); color: var(--info); }
+.finding h3 { font-size: 15px; margin: 0; }
+.finding .val { font-size: 22px; font-weight: 700; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.finding p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.section-title { margin: 36px 0 2px; }
+
+/* 新作投稿の評価 */
+.np-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
+.np-title { font-size: 16px; font-weight: 700; }
+.np-title a { color: var(--text); text-decoration: none; }
+.np-title a:hover { text-decoration: underline; }
+.verdict { border-radius: 14px; padding: 10px 22px; text-align: center; flex: none; }
+.verdict span { display: block; font-size: 12px; font-weight: 700; }
+.verdict b { display: block; font-size: 26px; line-height: 1.3; }
+.verdict.good { background: var(--good-soft); color: var(--good); }
+.verdict.info { background: var(--info-soft); color: var(--info); }
+.verdict.warn { background: var(--warn-soft); color: var(--warn); }
+.np-table td:nth-child(2), .np-table th:nth-child(2) { text-align: right; min-width: 0; }
+.np-table td:first-child { white-space: nowrap; min-width: 8.5em; }
+.np-table .note { font-size: 11.5px; color: var(--muted); white-space: normal; max-width: 16em; }
+.np-table .st { font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 1px 8px; }
+.np-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 16px; }
+.np-cols h3 { font-size: 14.5px; margin: 0 0 6px; }
+.np-cols ul, .evi ul { margin: 0; padding-left: 1.2em; font-size: 13.5px; }
+.np-cols li { margin-bottom: 8px; }
+.np-cols li b { font-weight: 600; }
+.evi { margin-top: 10px; background: var(--surface-2); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.evi b { font-size: 12px; color: var(--muted); }
+.np-vs { margin-top: 12px; font-size: 13.5px; line-height: 2; }
+.np-vs a { color: var(--text); }
+.np-tag { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 0 9px; margin-right: 8px; line-height: 1.7; }
+.np-tag.cur { background: var(--s2); color: #fff; }
+.np-tag.prev { background: var(--s1); color: #fff; }
+.np-tag.base { background: var(--surface-2); color: var(--muted); }
+.np-h { font-size: 14.5px; margin: 20px 0 6px; }
+.np-table .cnt { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.np-lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.np-line { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 4px; }
+.np-line-t { font-size: 13px; font-weight: 700; }
+.chart .pline { fill: none; stroke: var(--muted); stroke-width: 2; stroke-linejoin: round; opacity: .55; }
+.chart .pt { fill: var(--muted); stroke: var(--surface); stroke-width: 2; }
+.chart .pt.prev { fill: var(--s1); }
+.chart .pt.cur { fill: var(--s2); }
+.chart text.cap { fill: var(--text); font-weight: 700; }
+.chart .medline { stroke: var(--text); stroke-width: 1.2; stroke-dasharray: 4 4; opacity: .5; }
+.lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: -1px; }
+.lg.cur { background: var(--s2); } .lg.prev { background: var(--s1); }
+.lg.med { width: 16px; height: 0; border-radius: 0; border-top: 2px dashed var(--muted); vertical-align: 3px; }
+.np-list td:nth-child(2) { min-width: 260px; }
+.np-list tr.is-cur td { background: var(--surface-2); }
+.props { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+.prop p { color: var(--text) !important; margin-top: 6px !important; }
+
+/* 台本 */
+.sc-form { display: flex; gap: 10px; flex-wrap: wrap; }
+.sc-form input { flex: 1 1 320px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 12px; padding: 11px 14px; font: inherit; }
+.sc-go, .sc-again, .sc-copy { border: 0; border-radius: 12px; padding: 11px 22px; font: inherit; font-weight: 700; cursor: pointer; color: #fff; background: var(--s1); }
+.sc-again { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.sc-copy { background: var(--good); padding: 8px 18px; font-size: 14px; }
+.sc-go:disabled, .sc-again:disabled { opacity: .5; cursor: default; }
+.sc-loading { margin-top: 16px; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.sc-loading i { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--s1); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sc-head { margin-top: 18px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.sc-title { font-size: 19px; font-weight: 700; }
+.sc-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.sc-concept { margin: 10px 0 0; font-size: 14px; }
+.sc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; margin-top: 16px; }
+@media (max-width: 900px) { .sc-grid { grid-template-columns: 1fr; } }
+.sc-grid h3 { font-size: 14.5px; margin: 0 0 8px; }
+.sc-scenes td, .sc-scenes th { white-space: normal !important; text-align: left !important; vertical-align: top; min-width: 0 !important; }
+.sc-scenes td:first-child { white-space: nowrap !important; font-weight: 700; }
+.sc-scenes td:nth-child(3) { min-width: 14.5em !important; }
+.sc-scenes .telop { display: inline-block; background: #1d1d1f; color: #fff; border-radius: 6px; padding: 2px 8px; font-weight: 700; white-space: pre-line; font-family: "Hiragino Mincho ProN", serif; }
+.sc-scenes .purpose { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.sc-reason { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.sc-reason b { display: block; font-size: 14px; }
+.sc-reason p { margin: 4px 0 0; font-size: 13.5px; }
+.sc-reason .evi { margin-top: 8px; }
+.sc-caption { white-space: pre-wrap; background: var(--surface-2); border-radius: 12px; padding: 14px 16px; font-size: 13.5px; line-height: 1.75; max-height: 420px; overflow-y: auto; margin: 0 0 10px; }
+.sc-hook { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; background: var(--warn-soft); border-radius: 10px; padding: 8px 12px; }
+.sc-hook-k { font-size: 12px; font-weight: 700; color: var(--warn); }
+.sc-hook b { font-size: 16px; }
+.sc-hook-m { font-size: 12.5px; color: var(--muted); }
+.sc-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 22px; }
+@media (max-width: 900px) { .sc-pair { grid-template-columns: 1fr; } }
+.sc-pair h3 { font-size: 14.5px; margin: 0 0 8px; }
+.sc-narr { background: var(--surface-2); border-radius: 12px; padding: 10px 16px; margin-bottom: 8px; max-height: 420px; overflow-y: auto; }
+.sc-narr-row { display: grid; grid-template-columns: 5.5em 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.sc-narr-row:last-child { border-bottom: 0; }
+.sc-narr-row span { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.sc-narr-row p { margin: 0; font-size: 17px; line-height: 1.6; font-weight: 600; }
+.sc-narr-meta { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+.buzz-panel { margin-top: 16px; }
+.buzz-panel > summary { font-weight: 700; color: var(--text); font-size: 15px; }
+.buzz-core { margin: 14px 0 10px; font-size: 14px; }
+.buzz-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.buzz-cols h3 { font-size: 14.5px; margin: 0 0 8px; }
+.buzz-pr, .buzz-new { margin: 0; padding-left: 1.1em; font-size: 13.5px; }
+.buzz-pr li, .buzz-new li { margin-bottom: 6px; }
+.buzz-new li span { display: block; font-size: 12px; color: var(--muted); }
+.buzz-from { font-size: 12px; color: var(--muted); font-weight: 400; }
+.buzz-all { margin-top: 14px; }
+.buzz-all h4 { font-size: 13.5px; margin: 12px 0 2px; }
+.buzz-all p { margin: 0; font-size: 13px; color: var(--muted); }
+.sc-note { font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+
+.error { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; display: none; }
+</style>
+</head>
+<body>
+<nav class="topnav" aria-label="ページ"><div class="in">
+  <a href="/report.html" class="on" aria-current="page">データ</a>
+  <a href="/">編集ツール</a>
+</div></nav>
+
+<main>
+  <div class="error" id="err">データを読み込めませんでした。このサイトを動かしている Mac が起動しているか確認してください。</div>
+
+  <section class="panel account" id="account"></section>
+
+  <section class="panel" style="margin-top:16px">
+    <h2>新作投稿の評価</h2>
+    <div id="newpost"></div>
+  </section>
+
+  <div class="periodbar">
+    <div class="seg" role="tablist" aria-label="期間">
+      <button type="button" data-p="1">1日</button>
+      <button type="button" data-p="7" class="on">1週間</button>
+      <button type="button" data-p="30">1ヶ月</button>
+    </div>
+    <span class="range" id="range"></span>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid2">
+    <section class="panel chart">
+      <h2>リーチの推移</h2>
+      <p class="sub" id="reachSub"></p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>フォロワー</span><span><i style="background:var(--s2)"></i>フォロワー以外</span></div>
+      <div id="reachChart"></div>
+    </section>
+    <section class="panel chart">
+      <h2>新規フォロワーの推移</h2>
+      <p class="sub" id="followSub"></p>
+      <div id="followChart"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>反応の内訳</h2>
+      <p class="sub">期間中のいいね・保存・シェア・コメントの割合</p>
+      <div class="split" id="split"></div>
+      <div class="splitlegend" id="splitLegend"></div>
+    </section>
+    <section class="panel chart">
+      <h2>フォロワーの年齢・性別</h2>
+      <p class="sub">現在のフォロワー全体（期間に関係なし）</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>男性</span><span><i style="background:var(--s2)"></i>女性</span><span><i style="background:var(--s3)"></i>不明</span></div>
+      <div id="ageChart"></div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:16px">
+    <h2>期間中の投稿</h2>
+    <p class="sub">リーチの多い順。保存率 = 保存 ÷ リーチ</p>
+    <div class="tablewrap" id="posts"></div>
+  </section>
+
+  <h2 class="section-title" style="font-size:20px">プロフィール監査</h2>
+  <p class="sub">直近30日のデータから自動で判定しています</p>
+  <div class="audit" id="audit"></div>
+
+  <h2 class="section-title" style="font-size:20px">改善案</h2>
+  <p class="sub">直近60日の投稿データを比べて、差が大きかったものから順に並べています。根拠の数字はすべてこのページのデータから計算しています。本数が少ない比較は傾向として参考にしてください</p>
+  <div class="audit props" id="proposals"></div>
+
+  <h2 class="section-title" style="font-size:20px">次の投稿の台本（AI 提案）</h2>
+  <p class="sub">上の監査データ（伸びた投稿・型ごとの成績・冒頭の離脱率・視聴者層）をもとに、視聴維持率とファン化を狙ったリールの台本を Gemini が作ります</p>
+  <section class="panel">
+    <div class="sc-form">
+      <input type="text" id="scTheme" maxlength="200" placeholder="作りたいテーマ・商品（例：フルボトルケースの再販）※空欄ならデータからおまかせ">
+      <button type="button" class="sc-go" id="scGo">台本を作る</button>
+    </div>
+    <div id="scOut"></div>
+  </section>
+  <details class="panel buzz-panel">
+    <summary>台本に使っているバズワードの分析（共通点・新しいバズワード）</summary>
+    <div id="buzz"></div>
+  </details>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+(function () {
+  var D, H = {}, period = 7;
+  var tip = document.getElementById("tip");
+  var nf = new Intl.NumberFormat("ja-JP");
+  function num(v) { return v == null ? "—" : nf.format(Math.round(v)); }
+  function pct(v, d) { return v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d == null ? 1 : d) + "%"; }
+  function md(s) { var p = s.split("-"); return +p[1] + "/" + +p[2]; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function sum(a) { return a.reduce(function (x, y) { return x + (y || 0); }, 0); }
+  function has(a) { return a.every(function (x) { return x != null; }); }
+
+  function showTip(e, html) {
+    tip.innerHTML = html; tip.style.display = "block";
+    var x = e.clientX + 14, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    if (x + w > innerWidth - 8) x = e.clientX - w - 14;
+    if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+
+  // ---------- 縦棒グラフ（積み上げ可）。series: [{name, color, values}]
+  function bars(el, labels, series, opt) {
+    opt = opt || {};
+    var W = 640, H = 230, L = 46, R = 8, T = 10, B = 26;
+    var n = labels.length, pw = W - L - R, ph = H - T - B;
+    var totals = labels.map(function (_, i) { return sum(series.map(function (s) { return s.values[i]; })); });
+    var max = Math.max.apply(null, totals.concat([1]));
+    var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
+    if (nice / step <= 2) step /= 2;
+    var bw = pw / n, gap = Math.max(2, bw * 0.28), w = bw - gap;
+    var y = function (v) { return T + ph - v / nice * ph; };
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(opt.label || "") + '">';
+    if (opt.bandFrom != null) {
+      svg += '<rect class="bandr" x="' + (L + opt.bandFrom * bw) + '" y="' + T + '" width="' + ((n - opt.bandFrom) * bw) + '" height="' + ph + '"/>';
+    }
+    for (var g = 0; g <= nice + 1e-9; g += step) {
+      svg += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '"/>';
+      svg += '<text x="' + (L - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + (g >= 10000 ? (g / 10000) + "万" : nf.format(g)) + "</text>";
+    }
+    var every = Math.ceil(n / 10);
+    labels.forEach(function (lab, i) {
+      var x = L + i * bw + gap / 2, acc = 0;
+      series.forEach(function (s, si) {
+        var v = s.values[i] || 0; if (!v) return;
+        var y0 = y(acc), y1 = y(acc + v), h = Math.max(0, y0 - y1 - (si > 0 ? 2 : 0));
+        var top = si === series.length - 1 || !series.slice(si + 1).some(function (t) { return t.values[i]; });
+        var r = top ? Math.min(4, w / 2, h) : 0;
+        // 上端だけ角を丸める
+        svg += '<path fill="' + s.color + '" d="M' + x + " " + y0 + "V" + (y1 + r) + "Q" + x + " " + y1 + " " + (x + r) + " " + y1 +
+          "H" + (x + w - r) + "Q" + (x + w) + " " + y1 + " " + (x + w) + " " + (y1 + r) + "V" + y0 + 'Z"/>';
+        acc += v;
+      });
+      if (i % every === 0 || i === n - 1) svg += '<text x="' + (x + w / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + lab + "</text>";
+      svg += '<rect class="hit" data-i="' + i + '" x="' + (L + i * bw) + '" y="' + T + '" width="' + bw + '" height="' + ph + '"/>';
+    });
+    svg += '<line class="base" x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + ph) + '" y2="' + (T + ph) + '"/></svg>';
+    el.innerHTML = svg;
+    el.querySelectorAll(".hit").forEach(function (h) {
+      var i = +h.dataset.i;
+      h.addEventListener("mousemove", function (e) {
+        var rows = series.map(function (s) { return s.name + "　" + num(s.values[i]); });
+        if (series.length > 1) rows.push("合計　" + num(totals[i]));
+        showTip(e, "<b>" + (opt.tipLabels ? opt.tipLabels[i] : labels[i]) + "</b>" + rows.join("<br>"));
+      });
+      h.addEventListener("mouseleave", hideTip);
+    });
+  }
+
+  // ---------- 横棒（年齢・性別）
+  function hbars(el, rows, series) {
+    var W = 640, rowH = 26, L = 56, R = 60, T = 4, H = T + rows.length * rowH;
+    var totals = rows.map(function (r) { return sum(series.map(function (s) { return r[s.key]; })); });
+    var max = Math.max.apply(null, totals), pw = W - L - R;
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="フォロワーの年齢・性別">';
+    rows.forEach(function (r, i) {
+      var y = T + i * rowH + 4, x = L, h = rowH - 8;
+      svg += '<text x="' + (L - 8) + '" y="' + (y + h / 2 + 4) + '" text-anchor="end">' + r.age + "</text>";
+      series.forEach(function (s, si) {
+        var w = r[s.key] / max * pw; if (w <= 0) return;
+        var last = si === series.length - 1, rr = last ? Math.min(4, w, h / 2) : 0, ww = Math.max(0, w - (last ? 0 : 2));
+        svg += '<path fill="' + s.color + '" d="M' + x + " " + y + "H" + (x + ww - rr) + "Q" + (x + ww) + " " + y + " " + (x + ww) + " " + (y + rr) +
+          "V" + (y + h - rr) + "Q" + (x + ww) + " " + (y + h) + " " + (x + ww - rr) + " " + (y + h) + "H" + x + 'Z"/>';
+        x += w;
+      });
+      svg += '<text x="' + (x + 6) + '" y="' + (y + h / 2 + 4) + '">' + num(totals[i]) + "</text>";
+      svg += '<rect class="hit" data-i="' + i + '" x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH + '"/>';
+    });
+    el.innerHTML = svg + "</svg>";
+    el.querySelectorAll(".hit").forEach(function (h) {
+      var r = rows[+h.dataset.i], t = totals[+h.dataset.i];
+      h.addEventListener("mousemove", function (e) {
+        showTip(e, "<b>" + r.age + "歳</b>" + series.map(function (s) { return s.name + "　" + num(r[s.key]); }).join("<br>") + "<br>合計　" + num(t));
+      });
+      h.addEventListener("mouseleave", hideTip);
+    });
+  }
+
+  // ---------- 期間の切り出し
+  function slice(key, from, to) { return D.daily[key].slice(from, to); }
+  function windowIdx(n) { var N = D.dates.length; return { from: N - n, to: N, pfrom: N - 2 * n, pto: N - n }; }
+
+  function renderAccount() {
+    var p = D.profile;
+    document.getElementById("account").innerHTML =
+      '<div class="who"><h1>' + esc(p.name) + '</h1><div class="handle">@' + esc(p.username) +
+      (p.website ? '　・　<a href="' + esc(p.website) + '" target="_blank" rel="noopener">' + esc(p.website.replace(/^https?:\/\//, "")) + "</a>" : "") +
+      '</div><div class="bio">' + esc(p.biography.replace(/⁡/g, "")) + "</div>" +
+      '<div class="asof">' + md(D.last_date) + " までのデータ　・　最終更新 " + esc(D.fetched_at) + "（3時間おきに自動更新）" +
+      '<span id="refreshErr"></span></div></div>' +
+      '<div class="nums"><div><b>' + num(p.followers) + "</b><span>フォロワー</span></div><div><b>" + num(p.media_count) +
+      "</b><span>投稿</span></div><div><b>" + num(p.following) + "</b><span>フォロー中</span></div></div>";
+  }
+
+  function render() {
+    var n = period, w = windowIdx(n);
+    var label = n === 1 ? "前日比" : n === 7 ? "前週比" : "前月比";
+    document.getElementById("range").textContent = n === 1 ? md(D.dates[w.from]) + " の1日"
+      : md(D.dates[w.from]) + " 〜 " + md(D.dates[w.to - 1]) + "（" + n + "日間）";
+
+    // 数字のタイル
+    var tiles = [
+      ["リーチ", "reach", "日ごとのリーチの合計"],
+      ["閲覧数", "views"],
+      ["反応したアカウント", "engaged"],
+      ["反応の合計", "interactions", "いいね・保存・シェア・コメント等"],
+      ["新規フォロワー", "new_followers"],
+      ["保存", "saves"]
+    ];
+    document.getElementById("kpis").innerHTML = tiles.map(function (t) {
+      var cur = slice(t[1], w.from, w.to), prev = w.pfrom >= 0 ? slice(t[1], w.pfrom, w.pto) : [];
+      var c = has(cur) ? sum(cur) : null, p = prev.length && has(prev) ? sum(prev) : null;
+      var d = c != null && p ? (c - p) / p : null;
+      // 最新日の新規フォロワーはまだ集計されていないことがある（0 と返る）
+      var pending = t[1] === "new_followers" && n === 1 && c === 0;
+      var dtxt = pending ? "集計前の可能性があります" : d == null ? label + " —（データなし）"
+        : label + " <b>" + (d >= 0 ? "▲ " : "▼ ") + pct(Math.abs(d), 0) + "</b>";
+      return '<div class="kpi"' + (t[2] ? ' title="' + t[2] + '"' : "") + '><div class="k">' + t[0] + '</div><div class="v">' + num(c) +
+        '</div><div class="d">' + dtxt + "</div></div>";
+    }).join("");
+
+    // グラフは前後の流れが分かるよう、1日・1週間は直近14日、1ヶ月は30日を表示し、対象期間に色を敷く
+    var span = Math.max(n, 14), N = D.dates.length, gf = N - span;
+    var labels = D.dates.slice(gf).map(md);
+    var tipLabels = D.dates.slice(gf).map(function (d) { var x = new Date(d); return md(d) + "（" + "日月火水木金土"[x.getDay()] + "）"; });
+    document.getElementById("reachSub").textContent = n === 30 ? "直近30日・日別" : "直近14日・日別（色の付いた範囲が対象期間）";
+    bars(document.getElementById("reachChart"), labels, [
+      { name: "フォロワー", color: "var(--s1)", values: slice("reach_followers", gf, N) },
+      { name: "フォロワー以外", color: "var(--s2)", values: slice("reach_non_followers", gf, N) }
+    ], { bandFrom: span > n ? span - n : null, tipLabels: tipLabels, label: "リーチの推移" });
+    document.getElementById("followSub").textContent = document.getElementById("reachSub").textContent;
+    bars(document.getElementById("followChart"), labels, [
+      { name: "新規フォロワー", color: "var(--s1)", values: slice("new_followers", gf, N) }
+    ], { bandFrom: span > n ? span - n : null, tipLabels: tipLabels, label: "新規フォロワーの推移" });
+
+    // 反応の内訳
+    var parts = [["いいね", "likes", "var(--s1)"], ["保存", "saves", "var(--s2)"], ["シェア", "shares", "var(--s3)"], ["コメント", "comments", "var(--s4)"]]
+      .map(function (p) { return { name: p[0], v: sum(slice(p[1], w.from, w.to)), color: p[2] }; });
+    var tot = sum(parts.map(function (p) { return p.v; })) || 1;
+    var split = document.getElementById("split");
+    split.innerHTML = parts.map(function (p) { return p.v ? '<div style="flex:' + p.v + ";background:" + p.color + '" data-n="' + p.name + '" data-v="' + p.v + '"></div>' : ""; }).join("");
+    split.querySelectorAll("div").forEach(function (d) {
+      d.addEventListener("mousemove", function (e) { showTip(e, "<b>" + d.dataset.n + "</b>" + num(+d.dataset.v) + "（" + pct(d.dataset.v / tot) + "）"); });
+      d.addEventListener("mouseleave", hideTip);
+    });
+    document.getElementById("splitLegend").innerHTML = parts.map(function (p) {
+      return '<div><i style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:' + p.color + '"></i><span>' + p.name +
+        "</span><b>" + num(p.v) + "</b>（" + pct(p.v / tot) + "）</div>";
+    }).join("");
+
+    // 期間中の投稿
+    var from = D.dates[w.from], to = D.dates[w.to - 1];
+    var ps = D.posts.filter(function (p) { return p.date >= from && p.date <= to; }).sort(function (a, b) { return b.reach - a.reach; });
+    var latest = D.posts.reduce(function (a, b) { return a.date > b.date ? a : b; });
+    document.getElementById("posts").innerHTML = ps.length ? "<table><thead><tr><th>投稿日</th><th>投稿</th><th>リーチ</th><th>閲覧</th><th>いいね</th><th>保存</th><th>シェア</th><th>保存率</th><th>平均視聴</th></tr></thead><tbody>" +
+      ps.map(function (p) {
+        return "<tr><td>" + md(p.date) + '</td><td><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a> <span class="type">' + (p.type === "REELS" ? "リール" : "カルーセル") +
+          "</span></td><td>" + num(p.reach) + "</td><td>" + num(p.views) + "</td><td>" + num(p.likes) + "</td><td>" + num(p.saved) + "</td><td>" + num(p.shares) +
+          "</td><td>" + pct(p.saved / p.reach) + "</td><td>" + (p.avg_watch_sec == null ? "—" : p.avg_watch_sec + "秒") + "</td></tr>";
+      }).join("") + "</tbody></table>"
+      : '<div class="empty">この期間の投稿はありません（最新の投稿は ' + md(latest.date) + "「" + esc(latest.title) + "」）</div>";
+  }
+
+  // ---------- プロフィール監査（直近30日）
+  function renderAudit() {
+    var N = D.dates.length, f30 = N - 30, from = D.dates[f30];
+    var posts = D.posts.filter(function (p) { return p.date >= from; });
+    var reels = posts.filter(function (p) { return p.avg_watch_sec != null; });
+    var out = [];
+    function add(st, title, val, text) { out.push({ st: st, title: title, val: val, text: text }); }
+    var stLabel = { good: "良好", warn: "要改善", info: "参考" };
+
+    var perWeek = posts.length / 30 * 7;
+    add(perWeek >= 3 ? "good" : perWeek >= 2 ? "info" : "warn", "投稿頻度", "週 " + perWeek.toFixed(1) + " 本",
+      "直近30日で " + posts.length + " 本。" + (perWeek >= 3 ? "週3本以上を保てています。" : "週3本を目安に増やすと、リーチの山が途切れにくくなります。"));
+
+    var rf = sum(slice("reach_followers", f30, N)), rn = sum(slice("reach_non_followers", f30, N)), share = rn / (rf + rn);
+    add(share >= 0.6 ? "good" : "warn", "フォロワー以外へのリーチ", pct(share, 0),
+      "リーチのうちフォロワー以外の割合。" + (share >= 0.6 ? "新しい人に見つけてもらえています。" : "発見タブ・リールのおすすめに乗る投稿を増やす余地があります。"));
+
+    var gained = sum(slice("new_followers", f30, N)), followers = D.profile.followers;
+    add(gained / followers >= 0.05 ? "good" : "info", "フォロワーの増え方", "+" + num(gained) + " 人",
+      "30日でフォロワーの " + pct(gained / followers) + " 増。新規フォロワーの " +
+      pct(sum(slice("new_followers", N - 15, N)) / (gained || 1), 0) + " が直近15日に集中しています。");
+
+    var reach30 = sum(slice("reach", f30, N)), inter30 = sum(slice("interactions", f30, N));
+    var er = inter30 / reach30;
+    add(er >= 0.05 ? "good" : "info", "反応率", pct(er), "反応の合計 ÷ リーチ（直近30日）。いいね・保存・シェア・コメントを含みます。");
+
+    if (posts.length) {
+      var rates = posts.map(function (p) { return p.saved / p.reach; });
+      var avg = sum(rates) / rates.length;
+      var best = posts.reduce(function (a, b) { return a.saved / a.reach > b.saved / b.reach ? a : b; });
+      add(avg >= 0.01 ? "good" : "warn", "保存率（投稿の平均）", pct(avg),
+        "保存は「あとで見返したい」の合図。最も高いのは「" + best.title + "」（" + pct(best.saved / best.reach) + "）。");
+
+      var sorted = posts.map(function (p) { return p.reach; }).sort(function (a, b) { return a - b; });
+      var median = sorted[Math.floor(sorted.length / 2)];
+      var top = posts.reduce(function (a, b) { return a.reach > b.reach ? a : b; });
+      add("info", "伸びた投稿", "中央値の " + (top.reach / median).toFixed(1) + " 倍",
+        "「" + top.title + "」（" + md(top.date) + "）がリーチ " + num(top.reach) + "。同じ切り口の投稿を続けると再現しやすくなります。");
+
+      var promo = posts.filter(function (p) { return /オフ|セール|販売|損/.test(p.title); });
+      var other = posts.filter(function (p) { return promo.indexOf(p) < 0; });
+      // 1本のバズ投稿に引っ張られないよう、平均ではなく中央値で比べる
+      function med(a) { var x = a.map(function (p) { return p.reach; }).sort(function (u, v) { return u - v; }), m = x.length >> 1; return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; }
+      if (promo.length && other.length) {
+        var ap = med(promo), ao = med(other);
+        add(ap >= ao ? "good" : "warn", "セール・告知投稿のリーチ", num(ap) + "（中央値）",
+          "それ以外の投稿は中央値 " + num(ao) + "。" + (ap < ao ? "告知だけの投稿は伸びにくいため、制作の裏側や比較など見どころと組み合わせるのがおすすめです。" : "告知投稿も通常投稿並みに届いています。"));
+      }
+    }
+    if (reels.length) {
+      var skip = sum(reels.map(function (p) { return p.skip_rate; })) / reels.length;
+      var watch = sum(reels.map(function (p) { return p.avg_watch_sec; })) / reels.length;
+      add(skip <= 0.45 ? "good" : "warn", "リールの離脱率（最初の3秒）", pct(skip, 0),
+        "平均視聴 " + watch.toFixed(1) + " 秒。" + (skip <= 0.45 ? "冒頭で引き付けられています。" : "最初の3秒で結論や完成形を見せると離脱を減らせます。"));
+    }
+    var bio = D.profile.biography;
+    var cta = /リンク|プロフ|HP|購入|ショップ|販売|チェック|DM/.test(bio);
+    add(D.profile.website && cta ? "good" : "warn", "プロフィール文", D.profile.website ? "リンクあり" : "リンクなし",
+      (cta ? "行動を促す一言が入っています。" : "リンク先で何ができるか（例：「▶︎専用ケースの購入はこちら↓」）を一言添えると、プロフィールから販売ページへ進みやすくなります。"));
+
+    document.getElementById("audit").innerHTML = out.map(function (f) {
+      return '<div class="finding"><div class="top"><span class="st ' + f.st + '">' + (f.st === "good" ? "✓ " : f.st === "warn" ? "! " : "i ") + stLabel[f.st] +
+        "</span><h3>" + f.title + '</h3></div><div class="val">' + f.val + "</div><p>" + esc(f.text) + "</p></div>";
+    }).join("");
+  }
+
+  // ================================================================ 共通: 投稿の分類と率
+  // タイトル（キャプション1行目）から投稿の型を分ける。上から順に当てはめる
+  var TYPES = [
+    ["参加型（募集・ランキング）", /募集|リクエスト|ランキング|1位|トップ|人気|教えて/],
+    ["告知・セール", /オフ|セール|販売|損|出展|イベント|記念|クーポン/],
+    ["お役立ち・解説", /知って|方法|比較|違い|解説|おすすめ|コツ/],
+    ["制作の裏側", /制作|製作|開始|裏側|作り方/],
+    ["新作紹介", /登場|完成|新シリーズ|ついに/]
+  ];
+  function kind(p) { for (var i = 0; i < TYPES.length; i++) if (TYPES[i][1].test(p.title)) return TYPES[i][0]; return "その他"; }
+  function inter(p) { return p.likes + p.comments + p.saved + p.shares; }
+  var METRICS = [
+    // key, 表示名, 値の取り方, 重み, 大きいほど良いか, 表示形式
+    ["reach", "リーチ", function (p) { return p.reach; }, 3, true, "n"],
+    ["er", "反応率", function (p) { return p.reach ? inter(p) / p.reach : null; }, 2, true, "p"],
+    ["save", "保存率", function (p) { return p.reach ? p.saved / p.reach : null; }, 2, true, "p"],
+    ["share", "シェア率", function (p) { return p.reach ? p.shares / p.reach : null; }, 1.5, true, "p"],
+    ["like", "いいね率", function (p) { return p.reach ? p.likes / p.reach : null; }, 1, true, "p"],
+    ["comment", "コメント率", function (p) { return p.reach ? p.comments / p.reach : null; }, 0.5, true, "p2"],
+    ["skip", "冒頭3秒の離脱率", function (p) { return p.skip_rate; }, 1.5, false, "p0"],
+    ["watch", "平均視聴時間", function (p) { return p.avg_watch_sec; }, 1, true, "s"]
+  ];
+  function median(a) {
+    a = a.filter(function (x) { return x != null && isFinite(x); }).sort(function (x, y) { return x - y; });
+    if (!a.length) return null;
+    var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+  function fmtv(v, f) {
+    if (v == null) return "—";
+    return f === "n" ? num(v) : f === "s" ? v.toFixed(1) + "秒" : f === "p0" ? pct(v, 0) : f === "p2" ? pct(v, 2) : pct(v, 1);
+  }
+  function byTime(a) { return a.slice().sort(function (x, y) { return (x.timestamp || x.date) < (y.timestamp || y.date) ? -1 : 1; }); }
+  var LEVELS = [[0.5, "良好", "good"], [0.15, "やや良好", "good"], [-0.15, "普通", "info"], [-0.5, "やや悪い", "warn"], [-Infinity, "悪い", "warn"]];
+
+  // ================================================================ ② 新作投稿の評価
+  function hoursSince(ts) { return ts ? (Date.now() - new Date(ts.replace(/([+-]\d\d)(\d\d)$/, "$1:$2")).getTime()) / 3600000 : null; }
+  // 履歴から「公開から age 時間時点」のリーチを探す（前後 25% 以内の記録がある時だけ）
+  function reachAt(id, age) {
+    var rows = (H || {})[id] || [], best = null;
+    rows.forEach(function (r) { if (best == null || Math.abs(r[0] - age) < Math.abs(best[0] - age)) best = r; });
+    return best && Math.abs(best[0] - age) <= Math.max(3, age * 0.25) ? best[1] : null;
+  }
+
+  function renderNewPost() {
+    var el = document.getElementById("newpost");
+    var ps = byTime(D.posts);
+    if (ps.length < 3) { el.innerHTML = '<div class="empty">比べられる投稿がまだ足りません。</div>'; return; }
+    var cur = ps[ps.length - 1], prev = ps[ps.length - 2], base = ps.slice(Math.max(0, ps.length - 11), ps.length - 1);
+    var age = hoursSince(cur.timestamp), young = age != null && age < 72;
+    var isReel = cur.avg_watch_sec != null;
+
+    // リーチは公開からの時間でまだ伸びるので、同じ時間時点の記録があればそれで比べる
+    var sameAge = null;
+    if (young) {
+      var others = base.map(function (p) { return reachAt(p.id, age); }).filter(function (v) { return v != null; });
+      if (others.length >= 3) sameAge = { median: median(others), n: others.length, prev: reachAt(prev.id, age) };
+    }
+    var rows = [], total = 0, wsum = 0;
+    METRICS.forEach(function (m) {
+      if ((m[0] === "skip" || m[0] === "watch") && !isReel) return;
+      var v = m[2](cur), pv = m[2](prev), bm = median(base.map(m[2])), w = m[3], note = "";
+      if (m[0] === "reach") {
+        if (sameAge) { bm = sameAge.median; if (sameAge.prev != null) pv = sameAge.prev; note = "公開" + Math.round(age) + "時間時点で比較（" + sameAge.n + "本）"; }
+        else if (young) { w = 1; note = "公開" + Math.round(age) + "時間：まだ伸びている途中のため参考"; }
+      }
+      if (v == null || bm == null || bm === 0) return;
+      var ratio = m[4] ? v / bm : bm / v;
+      var s = Math.max(-1.5, Math.min(1.5, Math.log2(ratio)));
+      total += s * w; wsum += w;
+      rows.push({ m: m, v: v, pv: pv, bm: bm, s: s, note: note });
+    });
+    var score = wsum ? total / wsum : 0;
+    var lv = LEVELS.filter(function (l) { return score >= l[0]; })[0];
+
+    // 原因と改善点（直近10本の中央値から大きく外れた指標）
+    var K = kind(cur), good = [], bad = [];
+    var byKind = {};
+    D.posts.forEach(function (p) { (byKind[kind(p)] = byKind[kind(p)] || []).push(p.reach); });
+    var otherMed = median(D.posts.filter(function (p) { return kind(p) !== K; }).map(function (p) { return p.reach; }));
+    var promoLow = byKind[K] && byKind[K].length >= 2 && median(byKind[K]) < otherMed;
+    rows.forEach(function (r) {
+      var k = r.m[0], diff = (r.m[4] ? r.v / r.bm - 1 : r.bm / r.v - 1);
+      var t = r.m[1] + " " + fmtv(r.v, r.m[5]) + "（中央値 " + fmtv(r.bm, r.m[5]) + "、" + (diff >= 0 ? "+" : "") + pct(diff, 0) + "）";
+      if (r.s >= 0.3) good.push(t);
+      if (r.s <= -0.3) {
+        var fix = {
+          reach: "見られた数が少なめです。表示を左右するのは冒頭の引きと保存・シェアです。" +
+            (K === "告知・セール" && promoLow ? "告知・セールの投稿はリーチの中央値が " + num(median(byKind[K])) + "（それ以外は " + num(otherMed) + "）と低い傾向があるため、作品の見どころ（完成形・収納数・比較）を先に見せ、告知は後半に入れる構成がおすすめです。" : "1行目に結論や数字（例：「60本を完全収納」）を入れ、最初の1秒で完成形を見せてください。"),
+          er: "見た人の反応が少なめです。最後に「どれが欲しい？コメントで教えて」など、反応してもらう一言を入れてください。",
+          save: "保存が少なめです。収納数・サイズ・対応アイテムの一覧など「あとで見返したい情報」を画面とキャプションに入れると保存されやすくなります。",
+          share: "シェアが少なめです。「〇〇好きの友達に送って」と促す一言や、ファン同士で話題にしたくなるネタ（ランキング・あるある）が効きます。",
+          like: "いいねが少なめです。完成形や並べた時の見栄えなど、ひと目で「いい」と思えるカットを長めに見せてください。",
+          comment: "コメントが少なめです。質問で終えるキャプション（例：「次は何のケースが欲しい？」）にするとコメントが付きやすくなります。",
+          skip: "最初の3秒で離れる人が多めです。冒頭に完成形・一番の見どころを置き、テロップで「何の動画か」をすぐ伝えてください。",
+          watch: "最後まで見られていません。説明を短く区切り、テンポよく見せ場を続けてください。"
+        }[k];
+        bad.push({ t: t, fix: fix });
+      }
+    });
+
+    var html = '<div class="np-head"><div><div class="np-title"><a href="' + esc(cur.url) + '" target="_blank" rel="noopener">' + esc(cur.title) + "</a></div>" +
+      '<div class="sub" style="margin:2px 0 0">' + md(cur.date) + " 公開（" + (age == null ? "" : age < 48 ? Math.round(age) + "時間前" : Math.floor(age / 24) + "日前") + "）・" +
+      (isReel ? "リール" : "カルーセル") + "・型: " + K + "</div></div>" +
+      '<div class="verdict ' + lv[2] + '"><span>総合判定</span><b>' + lv[1] + "</b></div></div>";
+    // 比較対象
+    html += '<div class="np-vs"><span class="np-tag cur">今回</span><a href="' + esc(cur.url) + '" target="_blank" rel="noopener">' + esc(cur.title) + "</a>（" + md(cur.date) + "）" +
+      '<br><span class="np-tag prev">前回</span><a href="' + esc(prev.url) + '" target="_blank" rel="noopener">' + esc(prev.title) + "</a>（" + md(prev.date) + "）" +
+      '<br><span class="np-tag base">中央値</span>前回を含む直近' + base.length + "本（" + md(base[0].date) + "〜" + md(prev.date) + "、下の「比較した投稿」に一覧）</div>";
+
+    // 実数の比較（リーチ・閲覧数・いいね・保存・シェア・コメント）
+    var COUNTS = [["reach", "リーチ（見た人の数）"], ["views", "閲覧数（インプレッション）"], ["likes", "いいね"], ["saved", "保存"], ["shares", "シェア"], ["comments", "コメント"]];
+    var reachRow = rows.filter(function (r) { return r.m[0] === "reach"; })[0];
+    function diffCell(v, bm) { if (v == null || !bm) return "—"; var d = v / bm - 1; return (d >= 0 ? "+" : "") + pct(d, 0); }
+    function markOf(v, bm, better) {
+      if (v == null || !bm) return "";
+      var s = Math.log2(better ? v / bm : bm / v);
+      return s >= 0.3 ? '<span class="st good">↑ 多い</span>' : s <= -0.3 ? '<span class="st warn">↓ 少ない</span>' : '<span class="st info">→ 普通</span>';
+    }
+    html += '<h3 class="np-h">実数の比較</h3><div class="tablewrap"><table class="np-table"><thead><tr><th>項目</th><th>今回</th><th>前回</th><th>直近' + base.length +
+      "本の中央値</th><th>中央値との差</th><th></th></tr></thead><tbody>" +
+      COUNTS.map(function (c) {
+        var k = c[0], v = cur[k], pv = prev[k], bm = median(base.map(function (p) { return p[k]; })), note = "";
+        if (k === "reach" && reachRow) { pv = reachRow.pv; bm = reachRow.bm; note = reachRow.note; }
+        return "<tr><td>" + c[1] + (note ? '<div class="note">' + esc(note) + "</div>" : "") + "</td><td><b>" + num(v) + "</b></td><td>" + num(pv) + "</td><td>" + num(bm) +
+          "</td><td>" + diffCell(v, bm) + "</td><td>" + markOf(v, bm, true) + "</td></tr>";
+      }).join("") +
+      (isReel ? "<tr><td>平均視聴時間</td><td><b>" + fmtv(cur.avg_watch_sec, "s") + "</b></td><td>" + fmtv(prev.avg_watch_sec, "s") + "</td><td>" +
+        fmtv(median(base.map(function (p) { return p.avg_watch_sec; })), "s") + "</td><td>" + diffCell(cur.avg_watch_sec, median(base.map(function (p) { return p.avg_watch_sec; }))) +
+        "</td><td>" + markOf(cur.avg_watch_sec, median(base.map(function (p) { return p.avg_watch_sec; })), true) + "</td></tr>" : "") +
+      "</tbody></table></div>";
+
+    // 率の比較（総合判定に使う指標）
+    var rateRows = rows.filter(function (r) { return r.m[0] !== "reach" && r.m[0] !== "watch"; });
+    var cnt = { er: inter, save: function (p) { return p.saved; }, share: function (p) { return p.shares; }, like: function (p) { return p.likes; }, comment: function (p) { return p.comments; } };
+    html += '<h3 class="np-h">率の比較（÷リーチ。総合判定に使う指標）</h3><div class="tablewrap"><table class="np-table"><thead><tr><th>指標</th><th>今回</th><th>前回</th><th>直近' + base.length +
+      "本の中央値</th><th>中央値との差</th><th></th></tr></thead><tbody>" +
+      rateRows.map(function (r) {
+        var diff = r.m[4] ? r.v / r.bm - 1 : r.bm / r.v - 1;  // プラス＝良い方向
+        var mark = r.s >= 0.3 ? '<span class="st good">↑ 良い</span>' : r.s <= -0.3 ? '<span class="st warn">↓ 低い</span>' : '<span class="st info">→ 普通</span>';
+        var c = cnt[r.m[0]], extra = function (p) { return c && p ? '<span class="cnt">（' + num(c(p)) + "件）</span>" : ""; };
+        return "<tr><td>" + r.m[1] + "</td><td><b>" + fmtv(r.v, r.m[5]) + "</b>" + extra(cur) + "</td><td>" + fmtv(r.pv, r.m[5]) + extra(prev) +
+          "</td><td>" + fmtv(r.bm, r.m[5]) + "</td><td>" + (diff >= 0 ? "+" : "") + pct(diff, 0) + "</td><td>" + mark + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+
+    // 折れ線グラフ（投稿順）。指標ごとに縦軸の大きさが違うので、1つずつ小さなグラフに分ける
+    var seq = base.concat([cur]);
+    html += '<h3 class="np-h">投稿ごとの推移</h3><p class="sub" style="margin:0 0 8px">古い順に並べています。<span class="lg cur"></span>今回　<span class="lg prev"></span>前回　<span class="lg med"></span>直近' +
+      base.length + "本の中央値（点の上にマウスを置くとタイトルと数が出ます）</p>" +
+      '<div class="np-lines">' + COUNTS.map(function (c) { return '<div class="np-line"><div class="np-line-t">' + c[1] + '</div><div class="chart" data-k="' + c[0] + '"></div></div>'; }).join("") + "</div>";
+
+    // 比較した投稿の一覧
+    html += '<h3 class="np-h">比較した投稿</h3><div class="tablewrap"><table class="np-list"><thead><tr><th>投稿日</th><th>タイトル</th><th>リーチ</th><th>閲覧数</th><th>いいね</th><th>保存</th><th>シェア</th><th>コメント</th></tr></thead><tbody>' +
+      seq.slice().reverse().map(function (p) {
+        var tag = p === cur ? '<span class="np-tag cur">今回</span>' : p === prev ? '<span class="np-tag prev">前回</span>' : "";
+        return '<tr class="' + (p === cur ? "is-cur" : "") + '"><td>' + md(p.date) + "</td><td>" + tag + '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.title) + "</a></td><td>" +
+          num(p.reach) + "</td><td>" + num(p.views) + "</td><td>" + num(p.likes) + "</td><td>" + num(p.saved) + "</td><td>" + num(p.shares) + "</td><td>" + num(p.comments) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+    pendingLines = { seq: seq, cur: cur, prev: prev, base: base };
+    html += '<div class="np-cols"><div><h3>良かった点</h3>' + (good.length ? "<ul>" + good.map(function (g) { return "<li>" + esc(g) + "</li>"; }).join("") + "</ul>" : '<p class="sub">直近の中央値を大きく上回った指標はありません。</p>') +
+      '</div><div><h3>原因と改善点</h3>' + (bad.length ? "<ul>" + bad.map(function (b) { return "<li><b>" + esc(b.t) + "</b><br>" + esc(b.fix) + "</li>"; }).join("") + "</ul>" : '<p class="sub">直近の中央値を大きく下回った指標はありません。この構成を続けてください。</p>') + "</div></div>";
+    html += '<p class="sub" style="margin:10px 0 0">判定方法: 各指標を直近' + base.length + "本の中央値と比べ（2倍で+1、半分で−1）、リーチ×3・反応率×2・保存率×2・シェア率×1.5・離脱率×1.5 などの重みで平均。" +
+      "+0.5以上=良好、+0.15以上=やや良好、±0.15未満=普通、−0.5超=やや悪い、それ以下=悪い（今回のスコア " + (Math.abs(score) < 0.005 ? "0.00" : (score > 0 ? "+" : "") + score.toFixed(2)) + "）。</p>";
+    el.innerHTML = html;
+    el.querySelectorAll(".np-line .chart").forEach(function (c) { lineChart(c, pendingLines, c.dataset.k); });
+  }
+
+  var pendingLines = null;
+  // 投稿順の折れ線。今回の点を強調し、中央値を破線で引く
+  function lineChart(el, L, key) {
+    var W = 320, H = 150, Lm = 44, R = 10, T = 12, B = 22, pw = W - Lm - R, ph = H - T - B;
+    var vals = L.seq.map(function (p) { return p[key] || 0; }), med = median(L.base.map(function (p) { return p[key]; }));
+    // 1本だけ飛び抜けた投稿（2位の2.5倍超）があると他が潰れて比べられないので、その点は上端で打ち切って数を添える
+    var desc = vals.slice().sort(function (a, b) { return b - a; });
+    var cap = desc.length > 2 && desc[0] > desc[1] * 2.5 ? desc[1] * 1.2 : null;
+    var max = Math.max(cap || desc[0], med || 0, 1);
+    var raw = max / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+    var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag, nice = Math.ceil(max / step) * step;
+    var n = vals.length, x = function (i) { return Lm + (n === 1 ? pw / 2 : i * pw / (n - 1)); }, y = function (v) { return T + ph - v / nice * ph; };
+    var short = function (g) { return g >= 10000 ? (g / 10000) + "万" : nf.format(g); };
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + key + 'の推移">';
+    for (var g = 0; g <= nice + 1e-9; g += step) {
+      svg += '<line class="gl" x1="' + Lm + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '"/><text x="' + (Lm - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + short(g) + "</text>";
+    }
+    if (med != null) svg += '<line class="medline" x1="' + Lm + '" x2="' + (W - R) + '" y1="' + y(med) + '" y2="' + y(med) + '"/>';
+    var yc = function (v) { return y(Math.min(v, nice)); };
+    svg += '<polyline class="pline" points="' + vals.map(function (v, i) { return x(i) + "," + yc(v); }).join(" ") + '"/>';
+    L.seq.forEach(function (p, i) {
+      var cls = p === L.cur ? "pt cur" : p === L.prev ? "pt prev" : "pt";
+      if (vals[i] > nice) {  // 打ち切った点: 上向きの三角と実際の数
+        var cx = x(i), cy = T;
+        svg += '<path class="' + cls + '" d="M' + (cx - 5) + " " + (cy + 6) + "L" + cx + " " + (cy - 3) + "L" + (cx + 5) + " " + (cy + 6) + 'Z"/>' +
+          '<text x="' + (cx + 8) + '" y="' + (cy + 6) + '" class="cap">↑' + num(vals[i]) + "</text>";
+        svg += '<rect class="hit" data-i="' + i + '" x="' + (x(i) - pw / (2 * Math.max(n - 1, 1))) + '" y="' + T + '" width="' + (pw / Math.max(n - 1, 1)) + '" height="' + ph + '"/>';
+        if (i === 0 || i === n - 1) svg += '<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="' + (i === 0 ? "start" : "end") + '">' + md(p.date) + "</text>";
+        return;
+      }
+      svg += '<circle class="' + cls + '" cx="' + x(i) + '" cy="' + y(vals[i]) + '" r="' + (p === L.cur ? 6 : 4) + '"/>';
+      if (i === 0 || i === n - 1 || i === n - 2) svg += '<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="' + (i === 0 ? "start" : i === n - 1 ? "end" : "middle") + '">' + (i === n - 2 ? "" : md(p.date)) + "</text>";
+      svg += '<rect class="hit" data-i="' + i + '" x="' + (x(i) - pw / (2 * Math.max(n - 1, 1))) + '" y="' + T + '" width="' + (pw / Math.max(n - 1, 1)) + '" height="' + ph + '"/>';
+    });
+    svg += '<line class="base" x1="' + Lm + '" x2="' + (W - R) + '" y1="' + (T + ph) + '" y2="' + (T + ph) + '"/></svg>';
+    el.innerHTML = svg;
+    el.querySelectorAll(".hit").forEach(function (h) {
+      var p = L.seq[+h.dataset.i];
+      h.addEventListener("mousemove", function (e) {
+        showTip(e, "<b>" + (p === L.cur ? "今回　" : p === L.prev ? "前回　" : "") + md(p.date) + "</b>" + esc(p.title).slice(0, 40) + "<br>" + num(p[key]) + (med != null ? "（中央値 " + num(med) + "）" : ""));
+      });
+      h.addEventListener("mouseleave", hideTip);
+    });
+  }
+
+  // ================================================================ ① 改善案（根拠つき）
+  function renderProposals() {
+    var ps = D.posts, out = [];
+    function add(gain, title, action, evidence) { out.push({ gain: gain, title: title, action: action, evidence: evidence }); }
+
+    // 1) 投稿の型ごとの成績
+    var groups = {};
+    ps.forEach(function (p) { (groups[kind(p)] = groups[kind(p)] || []).push(p); });
+    var stats = Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      return { k: k, n: g.length, reach: median(g.map(function (p) { return p.reach; })), save: median(g.map(function (p) { return p.saved / p.reach; })) };
+    }).filter(function (s) { return s.n >= 2; }).sort(function (a, b) { return b.reach - a.reach; });
+    if (stats.length >= 2) {
+      var top = stats[0], low = stats[stats.length - 1];
+      add(top.reach / low.reach, "「" + top.k + "」の投稿を増やす",
+        "リーチが最も高い型は「" + top.k + "」、最も低い型は「" + low.k + "」です。" + (low.k === "告知・セール" ? "告知やセールは単体で出さず、" + top.k + "の動画の後半に入れてください。" : "低い型は" + top.k + "の切り口と組み合わせてください。"),
+        stats.map(function (s) { return s.k + "：リーチ中央値 " + num(s.reach) + "・保存率 " + pct(s.save) + "（" + s.n + "本）"; }));
+    }
+
+    // 2) 冒頭の離脱率とリーチ
+    var reels = ps.filter(function (p) { return p.skip_rate != null; });
+    if (reels.length >= 6) {
+      var ms = median(reels.map(function (p) { return p.skip_rate; }));
+      var lo = reels.filter(function (p) { return p.skip_rate <= ms; }), hi = reels.filter(function (p) { return p.skip_rate > ms; });
+      var rl = median(lo.map(function (p) { return p.reach; })), rh = median(hi.map(function (p) { return p.reach; }));
+      if (rl > rh) add(rl / rh, "最初の3秒で完成形を見せる",
+        "冒頭で離れる人が少ないリールほど、リーチが大きく伸びています。1カット目に完成形や一番の見どころを置き、テロップで「何の動画か」を1秒で伝えてください。",
+        ["離脱率 " + pct(ms, 0) + " 以下のリール：リーチ中央値 " + num(rl) + "（" + lo.length + "本）", "離脱率 " + pct(ms, 0) + " 超のリール：リーチ中央値 " + num(rh) + "（" + hi.length + "本）"]);
+    }
+
+    // 3) 保存率とリーチ
+    var sorted = ps.slice().sort(function (a, b) { return b.saved / b.reach - a.saved / a.reach; });
+    var third = Math.max(2, Math.floor(ps.length / 3)), topS = sorted.slice(0, third), restS = sorted.slice(third);
+    var rTop = median(topS.map(function (p) { return p.reach; })), rRest = median(restS.map(function (p) { return p.reach; }));
+    if (rTop > rRest) add(rTop / rRest, "「保存したくなる情報」を入れる",
+      "保存率の高い投稿ほどリーチも伸びています。収納数・サイズ・対応アイテム・価格などを一覧で見せ、キャプション末尾に「あとで見返せるように保存してね」を入れてください。",
+      ["保存率が上位" + topS.length + "本：リーチ中央値 " + num(rTop) + "（例：" + topS.slice(0, 2).map(function (p) { return "「" + p.title + "」" + pct(p.saved / p.reach); }).join("、") + "）",
+       "それ以外" + restS.length + "本：リーチ中央値 " + num(rRest)]);
+
+    // 4) 投稿頻度（週ごと）
+    var N = D.dates.length, weeks = [];
+    for (var e = N; e - 7 >= 0; e -= 7) {
+      var from = D.dates[e - 7], to = D.dates[e - 1];
+      weeks.push({ posts: ps.filter(function (p) { return p.date >= from && p.date <= to; }).length, reach: sum(D.daily.reach.slice(e - 7, e)) / 7 });
+    }
+    var w2 = weeks.filter(function (w) { return w.posts >= 2; }), w1 = weeks.filter(function (w) { return w.posts <= 1; });
+    if (w2.length >= 2 && w1.length >= 2) {  // どちらも2週以上ある時だけ（1週だけの比較は偶然の差が大きい）
+      var a2 = median(w2.map(function (w) { return w.reach; })), a1 = median(w1.map(function (w) { return w.reach; }));
+      if (a2 > a1) add(a2 / a1, "週2本以上の投稿を続ける",
+        "投稿が週2本以上の週は、1日あたりのリーチが高くなっています。撮りためておき、間が空かないよう予約投稿してください。",
+        ["週2本以上の週：1日あたりリーチ中央値 " + num(a2) + "（" + w2.length + "週）", "週1本以下の週：1日あたりリーチ中央値 " + num(a1) + "（" + w1.length + "週）"]);
+    }
+
+    // 5) コメントを増やす
+    var part = ps.filter(function (p) { return kind(p) === "参加型（募集・ランキング）"; }), nonp = ps.filter(function (p) { return kind(p) !== "参加型（募集・ランキング）"; });
+    if (part.length >= 2 && nonp.length) {
+      var c1 = median(part.map(function (p) { return p.comments; })), c0 = median(nonp.map(function (p) { return p.comments; }));
+      if (c1 > c0) add(Math.min(c1 / Math.max(c0, 1), 3), "コメントで答えたくなる問いかけを入れる",
+        "募集・ランキングなど参加型の投稿はコメントが多く付いています。通常の投稿でも「次に作ってほしいケースは？」のように、答えやすい質問で締めてください。",
+        ["参加型：コメント中央値 " + num(c1) + "（" + part.length + "本）", "それ以外：コメント中央値 " + num(c0) + "（" + nonp.length + "本）"]);
+    }
+
+    // 6) 伸びた投稿の後のフォロー獲得（続編を早めに）
+    var best = ps.reduce(function (a, b) { return a.reach > b.reach ? a : b; });
+    var bi = D.dates.indexOf(best.date), nfw = D.daily.new_followers;
+    if (bi >= 7 && bi + 7 <= N && nfw[bi - 7] != null) {
+      var before = sum(nfw.slice(bi - 7, bi)), after = sum(nfw.slice(bi, bi + 7));
+      if (after > before) add(Math.min(after / Math.max(before, 1), 4), "伸びた投稿の「続編」を3日以内に出す",
+        "「" + best.title + "」の後、新規フォロワーが大きく増えました。伸びた投稿と同じテーマ・同じ構成の続編を間を空けずに出すと、増えた見込み客をフォローにつなげやすくなります。",
+        ["公開前7日の新規フォロワー：" + num(before) + " 人", "公開後7日の新規フォロワー：" + num(after) + " 人（リーチ " + num(best.reach) + "）"]);
+    }
+
+    out.sort(function (a, b) { return b.gain - a.gain; });
+    document.getElementById("proposals").innerHTML = out.map(function (o, i) {
+      var pr = o.gain >= 2 ? ["高", "warn"] : o.gain >= 1.3 ? ["中", "info"] : ["低", "info"];
+      return '<div class="finding prop"><div class="top"><span class="st ' + pr[1] + '">優先度 ' + pr[0] + "</span><h3>" + (i + 1) + ". " + esc(o.title) + "</h3></div>" +
+        "<p>" + esc(o.action) + '</p><div class="evi"><b>根拠</b><ul>' + o.evidence.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul></div></div>";
+    }).join("") || '<div class="empty">提案できるだけのデータがまだありません。</div>';
+  }
+
+
+  // ================================================================ 台本（Gemini）
+  var SC_KEY = "report-script";
+  var scState = { avoid: [], last: null, theme: "" };
+  try { scState = JSON.parse(localStorage.getItem(SC_KEY)) || scState; } catch (e) {}
+  function scSave() { try { localStorage.setItem(SC_KEY, JSON.stringify(scState)); } catch (e) {} }
+  function copyText(text, btn) {
+    function done() { var t = btn.textContent; btn.textContent = "コピーしました"; setTimeout(function () { btn.textContent = t; }, 1600); }
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(done, function () { fallback(); });
+    fallback();
+    function fallback() {  // 社内の他のパソコン（http://IP）では clipboard API が使えない
+      var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { alert("コピーできませんでした。文章を選んでコピーしてください。"); }
+      ta.remove();
+    }
+  }
+  // 台本の1シーンのセリフ（テロップとナレーションは同じ文言。古い台本は telop を使う）
+  function lineOf(x) { return String(x.line || x.telop || "").replace(/\\n/g, "\n").trim(); }
+  function narrationText(sc) {
+    return sc.scenes.map(function (x) { return x.time + "　" + lineOf(x).replace(/\n/g, ""); }).join("\n");
+  }
+  function scriptText(sc) {
+    return "【" + sc.title + "】（" + sc.duration_sec + "秒）\n" + sc.scenes.map(function (x) {
+      return x.time + "\n映像: " + x.visual + "\nテロップ／ナレーション: " + lineOf(x).replace(/\n/g, " / ");
+    }).join("\n\n");
+  }
+  function renderScript() {
+    var out = document.getElementById("scOut"), sc = scState.last;
+    if (!sc) { out.innerHTML = ""; return; }
+    var chars = sum(sc.scenes.map(function (x) { return lineOf(x).replace(/\n/g, "").length; }));
+    var hook = sc.hook ? '<div class="sc-hook"><span class="sc-hook-k">冒頭3秒のバズワード</span><b>「' + esc(sc.hook.buzzword) + "」</b>" +
+      '<span class="sc-hook-m">' + esc(sc.hook.source) + (sc.hook.base && sc.hook.base !== sc.hook.buzzword ? "（元：" + esc(sc.hook.base) + "）" : "") + "・狙い：" + esc(sc.hook.principle) + "</span></div>" : "";
+    out.innerHTML =
+      '<div class="sc-head"><div><div class="sc-title">' + esc(sc.title) + '</div><div class="sc-meta">' + esc(sc.post_type) + "・約" + sc.duration_sec + "秒・対象：" + esc(sc.target) +
+      (sc.theme ? "・テーマ：" + esc(sc.theme) : "") + '</div><p class="sc-concept">' + esc(sc.concept) + "</p>" + hook + "</div>" +
+      '<button type="button" class="sc-again" id="scAgain">↻ 別の台本を作る</button></div>' +
+      '<div class="sc-grid"><div><h3>台本</h3><div class="tablewrap"><table class="sc-scenes"><thead><tr><th>時間</th><th>映像</th><th>テロップ＝ナレーション</th></tr></thead><tbody>' +
+      sc.scenes.map(function (x) {
+        return "<tr><td>" + esc(x.time) + "</td><td>" + esc(x.visual) + '<div class="purpose">狙い：' + esc(x.purpose) + '</div></td><td><span class="telop">' +
+          esc(lineOf(x)) + "</span></td></tr>";
+      }).join("") + '</tbody></table></div><p class="sub" style="margin:6px 0 0">テロップとナレーションは一言一句同じです（テロップは読みやすい位置で改行）</p>' +
+      '<div style="margin-top:10px"><button type="button" class="sc-copy" id="scCopyScript">台本をコピー</button></div></div>' +
+      "<div><h3>この台本が効果的な理由</h3>" + sc.reasons.map(function (r) {
+        return '<div class="sc-reason"><b>' + esc(r.point) + "</b><p>" + esc(r.why) + '</p><div class="evi"><b>根拠</b>' + esc(r.evidence) + "</div></div>";
+      }).join("") + "</div></div>" +
+      // キャプションの隣にナレーション台本（収録用）
+      '<div class="sc-pair"><div><h3>キャプション</h3><div class="sc-caption">' + esc(sc.caption) + '</div><button type="button" class="sc-copy" id="scCopyCaption">キャプションをコピー</button></div>' +
+      '<div><h3>ナレーション台本（収録用）</h3><div class="sc-narr">' + sc.scenes.map(function (x) {
+        return '<div class="sc-narr-row"><span>' + esc(x.time) + "</span><p>" + esc(lineOf(x).replace(/\n/g, "")) + "</p></div>";
+      }).join("") + '</div><div class="sc-narr-meta">合計 ' + chars + " 文字・読み上げ目安 約" + Math.round(chars / 6) + "秒（1秒6文字）／動画 約" + sc.duration_sec + "秒</div>" +
+      '<button type="button" class="sc-copy" id="scCopyNarr">ナレーションをコピー</button></div></div>' +
+      '<p class="sc-note">AI が作った案です。【要確認】と書かれた部分や価格・日付は、事実を確かめてから使ってください。作成: ' + esc(sc.model || "Gemini") + "</p>";
+    document.getElementById("scAgain").onclick = function () { makeScript(true); };
+    document.getElementById("scCopyScript").onclick = function () { copyText(scriptText(sc), this); };
+    document.getElementById("scCopyCaption").onclick = function () { copyText(sc.caption, this); };
+    document.getElementById("scCopyNarr").onclick = function () { copyText(narrationText(sc), this); };
+  }
+
+  // ---------- バズワード分析（PDF の一覧・共通点・新しいバズワード・このアカウントでの実績）
+  function renderBuzz(B) {
+    var el = document.getElementById("buzz");
+    if (!B || !D) return;
+    var hookNames = ["自分ごと化", "知らない不安（損失回避）", "答えを隠す（情報の空白）", "みんなが選んでいる安心", "常識をひっくり返す"];
+    var pats = {}; B.principles.forEach(function (p) { pats[p.name] = new RegExp(p.pattern); });
+    var used = [], plain = [];
+    D.posts.forEach(function (p) {
+      var hits = hookNames.filter(function (k) { return pats[k].test(p.title); });
+      (hits.length ? used : plain).push({ p: p, hits: hits });
+    });
+    var mu = median(used.map(function (x) { return x.p.reach; })), mp = median(plain.map(function (x) { return x.p.reach; }));
+    el.innerHTML =
+      '<p class="buzz-core"><b>共通点：</b>' + esc(B.core) + "</p>" +
+      '<div class="evi" style="margin-bottom:14px"><b>このアカウントでの実績</b><ul>' +
+      "<li>心理の型を使ったタイトル：リーチ中央値 " + num(mu) + "（" + used.length + "本）／使っていないタイトル：" + num(mp) + "（" + plain.length + "本）</li>" +
+      used.sort(function (a, b) { return b.p.reach - a.p.reach; }).map(function (x) {
+        return "<li>「" + esc(x.p.title) + "」リーチ " + num(x.p.reach) + "（" + esc(x.hits.join("・")) + "）</li>";
+      }).join("") + "</ul></div>" +
+      '<div class="buzz-cols"><div><h3>人を惹きつける8つの心理</h3><ul class="buzz-pr">' + B.principles.map(function (p) {
+        return "<li><b>" + esc(p.name) + "</b>　" + esc(p.desc) + '<span class="buzz-from">（' + esc(p.from.join("・")) + "）</span></li>";
+      }).join("") + "</ul></div>" +
+      '<div><h3>新しいバズワード（' + B.new_words.length + "個）</h3><ul class=\"buzz-new\">" + B.new_words.map(function (w) {
+        return "<li><b>" + esc(w.word) + "</b><span>" + esc(w.principles.join(" × ")) + "</span></li>";
+      }).join("") + "</ul></div></div>" +
+      '<details class="buzz-all"><summary>元のバズワード一覧（' + B.total + "語・重複を除く）</summary>" + B.categories.map(function (c) {
+        return "<h4>" + esc(c.name) + '<span class="buzz-from">　' + esc(c.effect) + "</span></h4><p>" + c.words.map(esc).join("　/　") + "</p>";
+      }).join("") + "</details>";
+  }
+
+  function makeScript(again) {
+    var go = document.getElementById("scGo"), out = document.getElementById("scOut"), theme = document.getElementById("scTheme").value.trim();
+    if (again && scState.last) theme = scState.last.theme || "";  // 再生成は同じテーマで別の切り口
+    if (!again) scState.avoid = [];
+    go.disabled = true;
+    var againBtn = document.getElementById("scAgain"); if (againBtn) againBtn.disabled = true;
+    var wait = document.createElement("div");
+    wait.className = "sc-loading"; wait.innerHTML = "<i></i>台本を作成中です（30秒ほどかかります）";
+    out.insertBefore(wait, out.firstChild);
+    fetch("/api/script", { method: "POST", body: JSON.stringify({ theme: theme, avoid: scState.avoid }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.error) throw new Error(res.error);
+        res.theme = theme;
+        scState.last = res;
+        scState.avoid = scState.avoid.concat([res.title + "（" + res.post_type + "）"]).slice(-5);
+        scSave(); renderScript();
+      })
+      .catch(function (e) { wait.remove(); alert(e.message || "台本を作れませんでした。"); })
+      .then(function () { go.disabled = false; var b = document.getElementById("scAgain"); if (b) b.disabled = false; });
+  }
+  document.getElementById("scGo").onclick = function () { makeScript(false); };
+  if (scState.last) { document.getElementById("scTheme").value = scState.last.theme || ""; renderScript(); }
+  function renderAge() {
+    hbars(document.getElementById("ageChart"), D.audience_age_gender, [
+      { key: "M", name: "男性", color: "var(--s1)" }, { key: "F", name: "女性", color: "var(--s2)" }, { key: "U", name: "不明", color: "var(--s3)" }
+    ]);
+  }
+
+  document.querySelectorAll(".seg button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".seg button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      period = +b.dataset.p;
+      try { localStorage.setItem("report-period", period); } catch (e) {}
+      render();
+    });
+  });
+  try {
+    var saved = +localStorage.getItem("report-period");
+    if ([1, 7, 30].indexOf(saved) >= 0) {
+      period = saved;
+      document.querySelectorAll(".seg button").forEach(function (x) { x.classList.toggle("on", +x.dataset.p === saved); });
+    }
+  } catch (e) {}
+
+  function load() {
+    fetch("/insights/tokusatsu_box.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (data) {
+      var changed = !D || D.fetched_at !== data.fetched_at;
+      D = data;
+      document.getElementById("err").style.display = "none";
+      if (changed) {
+        renderAccount(); render(); renderAge(); renderAudit(); renderNewPost(); renderProposals();
+        fetch("/insights/buzzwords.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(renderBuzz).catch(function () {});
+      }
+      // 投稿ごとの履歴（同じ時間時点の比較用）。無くても判定はできる
+      fetch("/insights/post_history.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : {}; })
+        .then(function (h) { H = h; renderNewPost(); }).catch(function () {});
+      return fetch("/api/insights/status").then(function (r) { return r.json(); }).then(function (st) {
+        // 最新の取得に失敗していても、前回のデータで表示を続ける
+        var el = document.getElementById("refreshErr");
+        if (el) el.textContent = st.error ? "　・　最新の取得に失敗しました（" + st.error + "）" : "";
+      });
+    }).catch(function () { if (!D) document.getElementById("err").style.display = "block"; });
+  }
+  load();
+  setInterval(load, 30 * 60 * 1000);  // 開いたままでも最新のデータに入れ替える
+})();
+</script>
+</body>
+</html>

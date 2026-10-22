@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>字幕・音声カット・キャプション</title>
+<style>
+:root {
+  --bg: #f6f6f4; --surface: #fff; --surface-2: #f0efeb; --text: #1d1d1f; --muted: #6b6b72; --border: #d9d8d2;
+  --accent: #c2571a; --accent-soft: #fbeee6; --blue: #2f6fb5; --blue-soft: #e8f0fa;
+  --ok: #2e7d4f; --err: #b3261e; --err-soft: #fbe9e7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --surface: #1c1c1f; --surface-2: #26262a; --text: #ececee; --muted: #a0a0a8; --border: #3a3a40;
+    --accent: #f08a4b; --accent-soft: #3a261a; --blue: #7fb2ec; --blue-soft: #1b2a3b;
+    --ok: #7ccf9c; --err: #f2948c; --err-soft: #3b1d1b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141416; --surface: #1c1c1f; --surface-2: #26262a; --text: #ececee; --muted: #a0a0a8; --border: #3a3a40;
+  --accent: #f08a4b; --accent-soft: #3a261a; --blue: #7fb2ec; --blue-soft: #1b2a3b;
+  --ok: #7ccf9c; --err: #f2948c; --err-soft: #3b1d1b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1240px; margin: 0 auto; padding: 0 16px 80px; }
+
+/* ページ切り替え（データ / 編集ツール） */
+.topnav { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.topnav .in { max-width: 1240px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; }
+.topnav a { padding: 14px 18px 12px; text-decoration: none; color: var(--muted); font-weight: 700; border-bottom: 3px solid transparent; }
+.topnav a.on { color: var(--text); border-bottom-color: var(--text); }
+button { font: inherit; cursor: pointer; }
+input[type="file"] { display: none; }
+
+.banner { background: var(--err-soft); color: var(--err); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: none; }
+
+/* 貼り付け枠 */
+/* 3つの道具を横に並べ、結果はそれぞれの下に出す */
+.tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; align-items: start; }
+.zone {
+  background: var(--surface); border: 3px dashed var(--border); border-radius: 20px;
+  min-height: 300px; padding: 32px 24px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: border-color .15s, background .15s;
+}
+.zone:hover, .zone.drag { border-color: var(--accent); background: var(--accent-soft); }
+.zone[data-mode="cut"]:hover, .zone[data-mode="cut"].drag { border-color: var(--blue); background: var(--blue-soft); }
+.zone .icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 16px; }
+.zone[data-mode="cut"] .icon { background: var(--blue-soft); color: var(--blue); }
+.zone h2 { font-size: 22px; margin: 0 0 6px; }
+.zone p { margin: 0 0 20px; color: var(--muted); }
+.pick { border: 0; border-radius: 999px; padding: 11px 26px; font-weight: 700; color: #fff; background: var(--accent); }
+.zone[data-mode="cut"] .pick { background: var(--blue); }
+.zone .ext { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+
+/* 処理中・完成 */
+.jobs { margin-top: 14px; display: grid; gap: 12px; }
+.jobs:empty { display: none; }
+.job { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px; }
+.job-head { display: flex; align-items: center; gap: 10px; }
+.tag { font-size: 12px; border-radius: 999px; padding: 2px 10px; background: var(--accent-soft); color: var(--accent); flex: none; }
+.job[data-mode="cut"] .tag { background: var(--blue-soft); color: var(--blue); }
+.job-name { font-weight: 600; word-break: break-all; }
+.status { margin-left: auto; font-size: 13.5px; color: var(--muted); flex: none; }
+.status.done { color: var(--ok); font-weight: 700; }
+.status.error { color: var(--err); font-weight: 700; }
+.close { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; flex: none; }
+
+.bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 14px 0 6px; }
+.bar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.job[data-mode="cut"] .bar i { background: var(--blue); }
+.bar.busy i { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.meta { font-size: 13px; color: var(--muted); }
+.err { background: var(--err-soft); color: var(--err); border-radius: 10px; padding: 10px 14px; margin-top: 12px; }
+
+.result { display: flex; gap: 20px; align-items: flex-start; margin-top: 14px; flex-wrap: wrap; }
+.result video { width: 140px; border-radius: 10px; border: 1px solid var(--border); background: #000; display: block; }
+.result .side { flex: 1; min-width: 220px; }
+audio { width: 100%; margin-bottom: 12px; }
+.save { border: 0; border-radius: 12px; padding: 12px 26px; font-weight: 700; font-size: 16px; color: #fff; background: var(--ok); }
+.save:disabled { opacity: .6; cursor: default; }
+.save-note { margin-top: 6px; }
+
+details { margin-top: 16px; }
+summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+.cue { display: grid; grid-template-columns: 48px 1fr; gap: 8px; margin-top: 6px; }
+.cue span { font-size: 12px; color: var(--muted); padding-top: 8px; font-variant-numeric: tabular-nums; }
+.cue textarea {
+  width: 100%; resize: vertical; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 14px; line-height: 1.5;
+}
+.redo { margin-top: 10px; border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 10px; padding: 8px 16px; font-weight: 600; }
+.redo:disabled { opacity: .5; cursor: default; }
+
+/* キャプション */
+.caption-box {
+  background: var(--surface); border: 3px dashed var(--border); border-radius: 20px; min-height: 300px; padding: 24px;
+  display: flex; flex-direction: column; text-align: center;
+}
+.caption-box .icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: #f6e7f4; color: #a8378f; margin: 8px auto 16px; }
+.caption-box h2 { font-size: 22px; margin: 0 0 14px; }
+.cap-grid { display: grid; gap: 10px; text-align: left; }
+.cap-video {
+  border: 2px solid var(--border); border-radius: 14px; padding: 14px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 84px; background: var(--surface-2);
+  transition: border-color .15s, background .15s;
+}
+.cap-video:hover, .cap-video.drag { border-color: #a8378f; background: #fbf1f9; }
+.cap-video b { display: block; margin-bottom: 4px; }
+.cap-video .file { font-size: 13px; color: var(--muted); word-break: break-all; }
+.cap-video.has-file { border-style: solid; border-color: #a8378f; }
+.cap-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; display: block; }
+.cap-grid textarea, .key-row input {
+  width: 100%; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.6;
+}
+.cap-grid textarea { min-height: 120px; resize: vertical; }
+.cap-go { margin: 14px auto 0; border: 0; border-radius: 999px; padding: 12px 30px; font-weight: 700; color: #fff; background: #a8378f; }
+.cap-go:disabled { opacity: .45; cursor: default; }
+.key-row { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--err-soft); color: var(--err); font-size: 13.5px; display: none; }
+.key-row form { display: flex; gap: 8px; margin-top: 8px; }
+.key-row button { flex: none; white-space: nowrap; border: 0; border-radius: 10px; padding: 0 16px; font-weight: 700; color: #fff; background: var(--err); }
+.job[data-mode="caption"] .tag { background: #f6e7f4; color: #a8378f; }
+.job[data-mode="caption"] .bar i { background: #a8378f; }
+.caption-out { margin-top: 14px; }
+.caption-text {
+  white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border-radius: 12px; padding: 14px 16px;
+  font-size: 14.5px; line-height: 1.75; max-height: 520px; overflow-y: auto;
+}
+.copy { margin-top: 10px; border: 0; border-radius: 12px; padding: 12px 26px; font-weight: 700; font-size: 16px; color: #fff; background: var(--ok); }
+.copy.done { background: var(--muted); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .caption-box h2 .icon, :root:not([data-theme="light"]) .job[data-mode="caption"] .tag { background: #3a1f35; color: #e9a0d8; }
+  :root:not([data-theme="light"]) .cap-video:hover, :root:not([data-theme="light"]) .cap-video.drag { background: #2a1a27; }
+}
+
+@media (max-width: 640px) {
+  .cap-video { min-height: 120px; }
+  main { padding-top: 16px; }
+  .zone { min-height: 220px; }
+}
+</style>
+</head>
+<body>
+<nav class="topnav" aria-label="ページ"><div class="in">
+  <a href="/report.html">データ</a>
+  <a href="/" class="on" aria-current="page">編集ツール</a>
+</div></nav>
+<main>
+  <div class="banner" id="offline">つながりません。このサイトを動かしている Mac が起動しているか確認してください。</div>
+
+  <div class="tools">
+    <div>
+      <div class="zone" data-mode="telop">
+        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M7 15h4M14 15h3M7 11h10"/></svg></div>
+        <h2>字幕生成</h2>
+        <p>ここに動画を貼り付けて字幕生成</p>
+        <button class="pick" type="button">動画を選ぶ</button>
+        <input type="file" accept=".mov,.mp4,.m4v,video/*" multiple>
+        <div class="ext">.MOV / .mp4</div>
+      </div>
+      <div class="jobs" id="jobs-telop"></div>
+    </div>
+
+    <div>
+      <div class="zone" data-mode="cut">
+        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 7.5 20 18M8.6 16.5 20 6"/></svg></div>
+        <h2>音声カット</h2>
+        <p>ここに音声ファイルを貼って音声カット</p>
+        <button class="pick" type="button">音声を選ぶ</button>
+        <input type="file" accept=".m4a,.mp3,.wav,.aac,audio/*" multiple>
+        <div class="ext">.m4a / .mp3 / .wav</div>
+      </div>
+      <div class="jobs" id="jobs-cut"></div>
+    </div>
+
+    <div>
+      <section class="caption-box" id="captionBox">
+        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></div>
+        <h2>キャプション生成</h2>
+        <div class="cap-grid">
+          <div class="cap-video" id="capVideo">
+            <b>① ここに動画を貼り付け</b>
+            <span class="file" id="capFile">クリックして選ぶ / ドラッグ</span>
+            <input type="file" accept=".mov,.mp4,.m4v,video/*" id="capInput">
+          </div>
+          <textarea id="capBench" aria-label="真似したいキャプション" placeholder="② ここに真似したいキャプションを貼り付け"></textarea>
+        </div>
+        <button class="cap-go" id="capGo" type="button" disabled>キャプションを作る</button>
+        <div class="key-row" id="keyRow">
+          <span id="keyMsg">キャプション作成に使う Gemini の API キーが設定されていません。</span>
+          <form id="keyForm"><input type="password" id="keyInput" placeholder="Gemini の API キー" autocomplete="off"><button type="submit">保存</button></form>
+        </div>
+      </section>
+      <div class="jobs" id="jobs-caption"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var VIDEO = /\.(mov|mp4|m4v)$/i, AUDIO = /\.(m4a|mp3|wav|aac)$/i;
+  function listFor(mode) { return document.getElementById("jobs-" + mode) || document.getElementById("jobs-telop"); }
+  var offline = document.getElementById("offline");
+  var cards = {};
+  var saved = [];
+  try { saved = JSON.parse(localStorage.getItem("jobs") || "[]"); } catch (e) {}
+
+  function remember() {
+    try { localStorage.setItem("jobs", JSON.stringify(Object.keys(cards).filter(function (k) { return k.indexOf("up-") !== 0; }))); } catch (e) {}
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function fmt(sec) { sec = Math.max(0, Math.round(sec)); return (sec >= 60 ? Math.floor(sec / 60) + "分" : "") + (sec % 60) + "秒"; }
+
+  if (location.protocol === "file:") offline.style.display = "block";
+
+  // ---------- ファイルの受け取り（枠をクリック・ドラッグ・⌘V で貼り付け）
+  document.querySelectorAll(".zone").forEach(function (zone) {
+    var mode = zone.dataset.mode, input = zone.querySelector("input[type=file]");
+    zone.addEventListener("click", function () { input.click(); });
+    input.addEventListener("click", function (e) { e.stopPropagation(); });
+    input.addEventListener("change", function () { Array.prototype.forEach.call(input.files, function (f) { submit(f, mode); }); input.value = ""; });
+    ["dragenter", "dragover"].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add("drag"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.remove("drag"); }); });
+    zone.addEventListener("drop", function (e) { Array.prototype.forEach.call(e.dataTransfer.files, function (f) { submit(f, mode); }); });
+  });
+  // 枠の外に落としてもブラウザでファイルが開かないようにする
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+  // コピーしたファイルを ⌘V / Ctrl+V で貼り付け（動画は字幕、音声はカットへ）
+  document.addEventListener("paste", function (e) {
+    Array.prototype.forEach.call((e.clipboardData && e.clipboardData.files) || [], function (f) {
+      if (VIDEO.test(f.name)) submit(f, "telop"); else if (AUDIO.test(f.name)) submit(f, "cut");
+    });
+  });
+
+  // ---------- キャプション
+  var capFile = null, capVideo = document.getElementById("capVideo"), capInput = document.getElementById("capInput");
+  var capBench = document.getElementById("capBench"), capGo = document.getElementById("capGo");
+  function capReady() { capGo.disabled = !(capFile && capBench.value.trim()); }
+  function capSet(f) {
+    if (!f) return;
+    if (!VIDEO.test(f.name)) return alert("「" + f.name + "」は動画ではありません。");
+    capFile = f;
+    document.getElementById("capFile").textContent = f.name;
+    capVideo.classList.add("has-file");
+    capReady();
+  }
+  capVideo.addEventListener("click", function () { capInput.click(); });
+  capInput.addEventListener("click", function (e) { e.stopPropagation(); });
+  capInput.addEventListener("change", function () { capSet(capInput.files[0]); capInput.value = ""; });
+  ["dragenter", "dragover"].forEach(function (ev) { capVideo.addEventListener(ev, function (e) { e.preventDefault(); capVideo.classList.add("drag"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { capVideo.addEventListener(ev, function (e) { e.preventDefault(); capVideo.classList.remove("drag"); }); });
+  capVideo.addEventListener("drop", function (e) { capSet(e.dataTransfer.files[0]); });
+  capBench.addEventListener("input", capReady);
+  capGo.addEventListener("click", function () {
+    submit(capFile, "caption", capBench.value);
+    capFile = null; capVideo.classList.remove("has-file");
+    document.getElementById("capFile").textContent = "クリックして選ぶ / ここにドラッグ";
+    capReady();
+  });
+
+  // API キーの設定（サイトを動かしている Mac でだけ入力できる）
+  function checkKey() {
+    if (location.protocol === "file:") return;
+    fetch("/api/settings").then(function (r) { return r.json(); }).then(function (st) {
+      var row = document.getElementById("keyRow");
+      row.style.display = st.has_key ? "none" : "block";
+      document.getElementById("keyForm").style.display = st.can_set_key ? "flex" : "none";
+      if (!st.can_set_key) document.getElementById("keyMsg").textContent = "キャプション作成の準備ができていません。サイトの管理者に API キーの設定を依頼してください。";
+    }).catch(function () {});
+  }
+  document.getElementById("keyForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var input = document.getElementById("keyInput");
+    fetch("/api/settings/key", { method: "POST", body: input.value.trim() }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res.error) return alert(res.error);
+      input.value = ""; checkKey();
+    });
+  });
+  checkKey();
+
+  function submit(file, mode, benchmark) {
+    if (mode === "telop" && !VIDEO.test(file.name)) return alert("「" + file.name + "」は動画ではありません。音声は「音声カット」に入れてください。");
+    if (mode === "cut" && !AUDIO.test(file.name)) return alert("「" + file.name + "」は音声ではありません。動画は「字幕生成」に入れてください。");
+    var tmp = "up-" + Date.now() + Math.random();
+    var card = makeCard(tmp, mode);
+    var xhr = new XMLHttpRequest();
+    card.xhr = xhr;  // 送信中に × を押したら送信をやめる
+    xhr.open("POST", "/api/jobs");
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.setRequestHeader("X-Mode", mode);
+    if (benchmark) xhr.setRequestHeader("X-Benchmark", encodeURIComponent(benchmark));
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) render(card, { mode: mode, name: file.name, status: "uploading", pct: e.loaded / e.total });
+    };
+    xhr.onload = function () {
+      var res = {}; try { res = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status !== 200) return render(card, { mode: mode, name: file.name, status: "error", error: res.error || "送信に失敗しました。" });
+      card.xhr = null;
+      delete cards[tmp]; card.dataset.id = res.id; cards[res.id] = card; remember(); poll(res.id);
+    };
+    xhr.onabort = function () {};
+    xhr.onerror = function () { render(card, { mode: mode, name: file.name, status: "error", error: "サイトにつながりません。もう一度お試しください。" }); };
+    xhr.send(file);
+    render(card, { mode: mode, name: file.name, status: "uploading", pct: 0 });
+  }
+
+  // ---------- 表示
+  function makeCard(id, mode) {
+    var el = document.createElement("div");
+    el.className = "job"; el.dataset.mode = mode; el.dataset.id = id;
+    var list = listFor(mode);
+    list.insertBefore(el, list.firstChild);
+    cards[id] = el;
+    return el;
+  }
+
+  // 進み具合（0〜1）と、いまの作業名
+  function progress(job) {
+    if (job.status === "uploading") return [job.pct || 0, "送信中 " + Math.round((job.pct || 0) * 100) + "%"];
+    if (job.status === "queued") return [0.08, job.queue_ahead ? "順番待ち（前に" + job.queue_ahead + "件）" : "まもなく開始"];
+    var log = (job.log || []).join("\n");
+    if (job.mode === "caption") {
+      if (log.indexOf("[gemini]") >= 0) return [0.8, "キャプションを作成中"];
+      if (log.indexOf("[whisper]") >= 0) return [0.45, "動画の内容を聞き取り中"];
+      return [0.2, "動画を解析中"];
+    }
+    if (log.indexOf("[render]") >= 0) return [0.85, "動画を書き出し中"];
+    if (/\[repeat\]|\[cut\]/.test(log)) return [0.75, job.mode === "cut" ? "カットして保存中" : "字幕を作成中"];
+    if (log.indexOf("[whisper]") >= 0) return [0.45, "文字起こし中"];
+    return [0.2, "音声を解析中"];
+  }
+
+  function render(card, job) {
+    if (card.dataset.editing === "1" && job.status === "done") return;  // 文言の編集中は書き換えない
+    card.dataset.mode = job.mode;
+    if (card.parentNode !== listFor(job.mode)) listFor(job.mode).appendChild(card);  // 前回分は種類が分かってから所定の列へ
+    var label = { telop: "字幕", cut: "音声カット", caption: "キャプション" }[job.mode] || "";
+    if (job.status === "cancelled") { card.remove(); delete cards[card.dataset.id]; remember(); return; }
+    var busy = job.status === "uploading" || job.status === "queued" || job.status === "running";
+    card.dataset.busy = busy ? "1" : "";
+    var p = busy ? progress(job) : null;
+    var statusText = job.status === "done" ? "完成" : job.status === "error" ? "失敗しました" : p[1];
+    var html = '<div class="job-head"><span class="tag">' + label + '</span><span class="job-name">' + esc(job.name || "") + "</span>" +
+      '<span class="status ' + job.status + '">' + statusText + "</span>" +
+      '<button class="close" title="' + (busy ? "処理を取り消す" : "一覧から消す") + '" type="button">×</button></div>';
+
+    if (p) {
+      html += '<div class="bar' + (job.status === "uploading" ? "" : " busy") + '"><i style="width:' + Math.round(p[0] * 100) + '%"></i></div>';
+      html += '<div class="meta">' + (job.status === "running" && job.started ? "経過 " + fmt(job.now - job.started) + "　・　" : "") + "このページを閉じても処理は続きます</div>";
+    }
+    if (job.status === "error") html += '<div class="err">' + esc(job.error || "処理に失敗しました。") + "</div>";
+
+    if (job.status === "done" && job.mode === "caption") {
+      html += (job.captions || []).map(function (c, i) {
+        return '<div class="caption-out"><div class="caption-text">' + esc(c) + '</div><button class="copy" type="button" data-i="' + i + '">コピー</button></div>';
+      }).join("");
+    } else if (job.status === "done") {
+      var byKind = {};
+      (job.outputs || []).forEach(function (o) { byKind[o.kind] = o; });
+      html += '<div class="result">';
+      if (byKind.video) {
+        html += '<video controls preload="none" playsinline' + (byKind.image ? ' poster="' + byKind.image.url + '"' : "") + ' src="' + byKind.video.url + '"></video>';
+      }
+      html += '<div class="side">';
+      if (byKind.audio) html += '<audio controls preload="none" src="' + byKind.audio.url + '"></audio>';
+      if (byKind.video || byKind.audio) html += '<button class="save" type="button">保存する</button><div class="meta save-note"></div>';
+      if (job.mode === "telop" && job.cues && job.cues.length) {
+        html += '<details><summary>字幕の文言を直す</summary>' +
+          job.cues.map(function (c) {
+            return '<div class="cue"><span>' + c.t.toFixed(1) + '秒</span><textarea rows="' + (c.text.indexOf("\\N") >= 0 ? 2 : 1) + '" data-t="' + c.t + '">' +
+              esc(c.text.split("\\N").join("\n")) + "</textarea></div>";
+          }).join("") + '<button class="redo" type="button" disabled>この文言で作り直す</button></details>';
+      }
+      html += "</div></div>";
+    }
+    var wasOpen = card.querySelector("details[open]");
+    card.innerHTML = html;
+    if (wasOpen && card.querySelector("details")) card.querySelector("details").open = true;
+
+    card.querySelectorAll(".copy").forEach(function (btn) {
+      btn.onclick = function () { copyText(job.captions[+btn.dataset.i], btn); };
+    });
+    var saveBtn = card.querySelector(".save");
+    if (saveBtn) saveBtn.onclick = function () { saveFiles(saveBtn, card.querySelector(".save-note"), saveList(job)); };
+    card.querySelector(".close").onclick = function () {
+      // 処理中・順番待ちなら、一覧から消すと同時に処理も取り消す
+      if (card.xhr) card.xhr.abort();
+      else if (card.dataset.busy) fetch("/api/jobs/" + card.dataset.id + "/cancel", { method: "POST" }).catch(function () {});
+      card.remove(); delete cards[card.dataset.id]; remember();
+    };
+    var redo = card.querySelector(".redo");
+    if (redo) {
+      card.querySelectorAll(".cue textarea").forEach(function (ta) {
+        ta.addEventListener("input", function () { card.dataset.editing = "1"; redo.disabled = false; });
+      });
+      redo.onclick = function () {
+        var cues = Array.prototype.map.call(card.querySelectorAll(".cue textarea"), function (ta) { return { t: +ta.dataset.t, text: ta.value }; });
+        redo.disabled = true; redo.textContent = "送信中…";
+        fetch("/api/jobs/" + card.dataset.id + "/rerender", { method: "POST", body: JSON.stringify(cues) })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res.error) { alert(res.error); redo.disabled = false; redo.textContent = "この文言で作り直す"; return; }
+            card.dataset.editing = ""; poll(card.dataset.id);
+          });
+      };
+    }
+  }
+
+  function copyText(text, btn) {
+    function done() {
+      btn.textContent = "コピーしました"; btn.classList.add("done");
+      setTimeout(function () { btn.textContent = "コピー"; btn.classList.remove("done"); }, 1800);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text) && done(); });
+    } else if (fallbackCopy(text)) {
+      done();  // 社内の他のパソコン（http://IP アドレス）では clipboard API が使えないため
+    }
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+    if (!ok) alert("コピーできませんでした。文章を選んでコピーしてください。");
+    return ok;
+  }
+
+  // ---------- 保存（字幕は .mp4 と .srt、音声カットは .m4a）
+  function saveList(job) {
+    var base = job.name.replace(/\.[^.]+$/, ""), list = [];
+    (job.outputs || []).forEach(function (o) {
+      if (o.kind === "video") list.push({ url: o.url, name: base + "_字幕.mp4" });
+      if (o.kind === "srt") list.push({ url: o.url, name: base + ".srt" });
+      if (o.kind === "audio") list.push({ url: o.url, name: base + "_カット.m4a" });
+    });
+    return list;
+  }
+
+  async function saveFiles(btn, note, files) {
+    var label = btn.textContent;
+    if (!window.showDirectoryPicker) {
+      // フォルダを選べないブラウザ（Safari・社内の他のパソコンなど）は「ダウンロード」フォルダに保存する
+      files.forEach(function (f, i) {
+        setTimeout(function () {
+          var a = document.createElement("a");
+          a.href = f.url + "?download=1&name=" + encodeURIComponent(f.name);
+          a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+        }, i * 800);
+      });
+      note.textContent = "「ダウンロード」フォルダに保存しました";
+      return;
+    }
+    var dir;
+    try {
+      dir = await window.showDirectoryPicker({ id: "save", mode: "readwrite", startIn: "desktop" });
+    } catch (e) {
+      return;  // キャンセル
+    }
+    btn.disabled = true; btn.textContent = "保存中…";
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var handle = await dir.getFileHandle(files[i].name, { create: true });
+        var writable = await handle.createWritable();
+        var res = await fetch(files[i].url);
+        if (!res.ok) throw new Error("ファイルを読み込めませんでした");
+        await res.body.pipeTo(writable);
+      }
+      note.textContent = "「" + dir.name + "」フォルダに保存しました";
+      btn.textContent = label;
+    } catch (e) {
+      note.textContent = "保存できませんでした: " + e.message;
+      btn.textContent = label;
+    }
+    btn.disabled = false;
+  }
+
+  function poll(id) {
+    fetch("/api/jobs/" + id).then(function (r) {
+      if (r.status === 404) { var c = cards[id]; if (c) { c.remove(); delete cards[id]; remember(); } return null; }
+      return r.json();
+    }).then(function (job) {
+      offline.style.display = "none";
+      if (!job || !cards[id]) return;
+      render(cards[id], job);
+      if (job.status === "queued" || job.status === "running") setTimeout(function () { poll(id); }, 2000);
+    }).catch(function () {
+      if (location.protocol !== "file:") offline.style.display = "block";
+      setTimeout(function () { poll(id); }, 5000);
+    });
+  }
+
+  // 前回の続き（ページを閉じても処理は続いている）
+  if (location.protocol !== "file:") {
+    saved.forEach(function (id) { makeCard(id, "telop"); poll(id); });
+  }
+})();
+</script>
+</body>
+</html>
